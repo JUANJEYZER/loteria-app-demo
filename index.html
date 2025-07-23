@@ -1411,28 +1411,114 @@
         displayTickets(filteredTickets);
     }
 
-    async function compartirTicket() {
-        try {
-            const ticketElement = document.getElementById('ticketPreview');
-            const actionButtons = ticketElement.querySelector('.ticket-actions');
+   // Reemplaza la función compartirTicket() actual con esta:
+async function compartirTicket() {
+    try {
+        const ticketElement = document.getElementById('ticketPreview');
+        const actionButtons = ticketElement.querySelector('.ticket-actions');
 
-            actionButtons.style.display = 'none';
+        // Ocultar botones temporalmente
+        actionButtons.style.display = 'none';
 
-            const canvas = await html2canvas(ticketElement, {
-                scale: 2,
-                backgroundColor: '#ffffff',
-                logging: false
-            });
+        // Generar imagen del ticket
+        const canvas = await html2canvas(ticketElement, {
+            scale: 2,
+            backgroundColor: '#ffffff',
+            logging: false
+        });
 
-            actionButtons.style.display = 'flex';
+        // Mostrar botones nuevamente
+        actionButtons.style.display = 'flex';
 
+        // Detectar si estamos en Android WebView o navegador web
+        if (typeof Android !== 'undefined' && Android.shareTicketFromAndroid) {
+            // Está en la app de Android
             const base64 = canvas.toDataURL('image/png');
             Android.shareTicketFromAndroid(base64);
-        } catch (error) {
-            console.error('Error al compartir:', error);
-            alert('No se pudo compartir el ticket. Intente de nuevo.');
+        } else {
+            // Está en navegador web - usar Web Share API o descargar
+            await shareOnWeb(canvas);
         }
+    } catch (error) {
+        console.error('Error al compartir:', error);
+        alert('No se pudo compartir el ticket. Intente de nuevo.');
     }
+}
+
+// Nueva función para compartir en navegadores web
+async function shareOnWeb(canvas) {
+    try {
+        // Convertir canvas a blob
+        const blob = await new Promise(resolve => {
+            canvas.toBlob(resolve, 'image/png');
+        });
+
+        // Intentar usar Web Share API (funciona en móviles modernos)
+        if (navigator.share && navigator.canShare) {
+            const file = new File([blob], 'ticket-loteria.png', { type: 'image/png' });
+            
+            if (navigator.canShare({ files: [file] })) {
+                await navigator.share({
+                    title: 'Ticket de Lotería',
+                    text: 'Mi ticket de lotería',
+                    files: [file]
+                });
+                return;
+            }
+        }
+
+        // Si Web Share API no funciona, descargar automáticamente
+        downloadTicketImage(canvas);
+        
+        // Mostrar instrucciones al usuario
+        alert('✅ Imagen descargada\n\nPuedes encontrar el ticket en tu carpeta de Descargas y compartirlo manualmente desde ahí.');
+        
+    } catch (error) {
+        console.error('Error en shareOnWeb:', error);
+        // Como último recurso, solo descargar
+        downloadTicketImage(canvas);
+        alert('Imagen del ticket descargada en tu dispositivo.');
+    }
+}
+
+// Función para descargar la imagen
+function downloadTicketImage(canvas) {
+    try {
+        // Crear enlace de descarga
+        const link = document.createElement('a');
+        const timestamp = new Date().getTime();
+        
+        link.download = `ticket-loteria-${timestamp}.png`;
+        link.href = canvas.toDataURL('image/png');
+        
+        // Trigger descarga
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    } catch (error) {
+        console.error('Error al descargar:', error);
+        alert('No se pudo descargar la imagen del ticket.');
+    }
+}
+
+// Función alternativa: copiar al portapapeles (para dispositivos compatibles)
+async function copyTicketToClipboard(canvas) {
+    try {
+        const blob = await new Promise(resolve => {
+            canvas.toBlob(resolve, 'image/png');
+        });
+        
+        await navigator.clipboard.write([
+            new ClipboardItem({ 'image/png': blob })
+        ]);
+        
+        alert('✅ Ticket copiado al portapapeles\n\nPuedes pegarlo en WhatsApp, Telegram, etc.');
+        return true;
+    } catch (error) {
+        console.error('Error al copiar:', error);
+        return false;
+    }
+}
 
     let html5QrcodeScanner = null;
 
